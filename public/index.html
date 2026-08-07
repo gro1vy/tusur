@@ -14,7 +14,11 @@
           <h1>Анализ конкурсных списков ТУСУР</h1>
           <p class="lead">Выберите направление и посмотрите, куда еще подали абитуриенты из этого списка по уникальному коду.</p>
         </div>
-        <button id="refreshButton" class="primary" type="button">Обновить кеш</button>
+        <div class="hero-actions">
+          <div class="user-chip">Пользователь: <strong id="usernameBadge">не выбран</strong></div>
+          <button id="switchUserButton" class="secondary" type="button">Сменить пользователя</button>
+          <button id="refreshButton" class="primary" type="button">Обновить кеш</button>
+        </div>
       </section>
 
       <section class="panel settings">
@@ -51,7 +55,11 @@
     <div id="startModal" class="modal">
       <form class="modal-card" id="startForm">
         <h2>Начальные данные</h2>
-        <p>При старте укажите свой уникальный код и направление. Если кеш еще пустой, сначала нажмите «Обновить кеш».</p>
+        <p>При старте укажите имя пользователя, свой уникальный код и направление. Настройки сохраняются отдельно для каждого пользователя.</p>
+        <label>
+          Имя пользователя
+          <input id="startUsernameInput" type="text" autocomplete="username" required>
+        </label>
         <label>
           Мой уникальный код
           <input id="startCodeInput" type="text" inputmode="numeric" required>

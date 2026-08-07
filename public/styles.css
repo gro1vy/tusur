@@ -43,6 +43,30 @@ select {
   margin-bottom: 24px;
 }
 
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 45px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, .82);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.user-chip strong {
+  margin-left: 6px;
+  color: var(--ink);
+}
+
 .eyebrow {
   margin: 0 0 8px;
   color: var(--accent);
@@ -150,6 +174,22 @@ input:focus {
   font-weight: 800;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.secondary {
+  border: 1px solid #b9c7dd;
+  border-radius: 999px;
+  padding: 13px 18px;
+  background: #fff;
+  color: var(--accent-dark);
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.secondary:hover {
+  border-color: var(--accent);
+  background: #eef4ff;
 }
 
 .primary:hover {
@@ -464,5 +504,19 @@ input:focus {
 
   .primary {
     width: 100%;
+  }
+
+  .hero-actions,
+  .secondary {
+    width: 100%;
+  }
+
+  .hero-actions {
+    justify-content: stretch;
+  }
+
+  .user-chip {
+    width: 100%;
+    justify-content: center;
   }
 }

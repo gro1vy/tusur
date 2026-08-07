@@ -1,15 +1,34 @@
+function readUserSettings(username) {
+  if (!username) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(localStorage.getItem(`user:${username}`) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+const initialUsername = localStorage.getItem('currentUsername') || '';
+const initialSettings = readUserSettings(initialUsername);
+
 const state = {
   cache: null,
-  selectedGroupId: localStorage.getItem('selectedGroupId') || '',
-  myCode: localStorage.getItem('myCode') || '',
+  username: initialUsername,
+  selectedGroupId: initialSettings.selectedGroupId || '',
+  myCode: initialSettings.myCode || '',
   expandedCodes: new Set()
 };
 
 const elements = {
   refreshButton: document.querySelector('#refreshButton'),
+  switchUserButton: document.querySelector('#switchUserButton'),
+  usernameBadge: document.querySelector('#usernameBadge'),
   groupSelect: document.querySelector('#groupSelect'),
   startGroupSelect: document.querySelector('#startGroupSelect'),
   myCodeInput: document.querySelector('#myCodeInput'),
+  startUsernameInput: document.querySelector('#startUsernameInput'),
   startCodeInput: document.querySelector('#startCodeInput'),
   onlyPriorityMoreThanOne: document.querySelector('#onlyPriorityMoreThanOne'),
   searchInput: document.querySelector('#searchInput'),
@@ -48,6 +67,15 @@ function selectedGroup() {
 
 function applicationsFor(code) {
   return state.cache?.applicantsByCode[String(code)] || [];
+}
+
+function applyUserSettings(username) {
+  const settings = readUserSettings(username);
+
+  state.username = username;
+  state.selectedGroupId = settings.selectedGroupId || '';
+  state.myCode = settings.myCode || '';
+  state.expandedCodes.clear();
 }
 
 function groupById(groupId) {
@@ -295,6 +323,8 @@ function renderApplicants() {
 }
 
 function render() {
+  elements.usernameBadge.textContent = state.username || 'не выбран';
+
   if (!state.cache) {
     elements.groupSelect.innerHTML = '<option>Кеш пуст</option>';
     elements.startGroupSelect.innerHTML = '<option>Кеш пуст</option>';
@@ -302,6 +332,8 @@ function render() {
     elements.myCard.className = 'panel my-card empty';
     elements.myCard.textContent = 'Нажмите «Обновить кеш», чтобы загрузить данные с сайта ТУСУР.';
     elements.applicants.innerHTML = '';
+    elements.startUsernameInput.value = state.username;
+    elements.startCodeInput.value = state.myCode;
     elements.startModal.classList.add('visible');
     return;
   }
@@ -315,13 +347,14 @@ function render() {
   elements.groupSelect.value = state.selectedGroupId;
   elements.startGroupSelect.value = state.selectedGroupId;
   elements.myCodeInput.value = state.myCode;
+  elements.startUsernameInput.value = state.username;
   elements.startCodeInput.value = state.myCode;
 
   renderStats();
   renderMyCard();
   renderApplicants();
 
-  if (!state.myCode || !state.selectedGroupId) {
+  if (!state.username || !state.myCode || !state.selectedGroupId) {
     elements.startModal.classList.add('visible');
   } else {
     elements.startModal.classList.remove('visible');
@@ -361,11 +394,24 @@ async function refreshCache() {
 function saveSettings(groupId, myCode) {
   state.selectedGroupId = groupId;
   state.myCode = String(myCode || '').trim();
-  localStorage.setItem('selectedGroupId', state.selectedGroupId);
-  localStorage.setItem('myCode', state.myCode);
+
+  if (!state.username) {
+    return;
+  }
+
+  localStorage.setItem('currentUsername', state.username);
+  localStorage.setItem(`user:${state.username}`, JSON.stringify({
+    selectedGroupId: state.selectedGroupId,
+    myCode: state.myCode
+  }));
 }
 
 elements.refreshButton.addEventListener('click', refreshCache);
+elements.switchUserButton.addEventListener('click', () => {
+  elements.startUsernameInput.value = '';
+  elements.startCodeInput.value = '';
+  elements.startModal.classList.add('visible');
+});
 elements.groupSelect.addEventListener('change', () => {
   saveSettings(elements.groupSelect.value, elements.myCodeInput.value);
   render();
@@ -376,6 +422,16 @@ elements.myCodeInput.addEventListener('change', () => {
 });
 elements.onlyPriorityMoreThanOne.addEventListener('change', renderApplicants);
 elements.searchInput.addEventListener('input', renderApplicants);
+elements.startUsernameInput.addEventListener('change', () => {
+  const username = elements.startUsernameInput.value.trim();
+  const settings = readUserSettings(username);
+
+  elements.startCodeInput.value = settings.myCode || '';
+
+  if (settings.selectedGroupId) {
+    elements.startGroupSelect.value = settings.selectedGroupId;
+  }
+});
 elements.applicants.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-code]');
 
@@ -393,6 +449,16 @@ elements.applicants.addEventListener('click', (event) => {
 });
 elements.startForm.addEventListener('submit', (event) => {
   event.preventDefault();
+
+  const username = elements.startUsernameInput.value.trim();
+
+  if (!username) {
+    showToast('Введите имя пользователя');
+    return;
+  }
+
+  applyUserSettings(username);
+  state.username = username;
   saveSettings(elements.startGroupSelect.value, elements.startCodeInput.value);
   render();
 });

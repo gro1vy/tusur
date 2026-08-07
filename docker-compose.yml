@@ -1,0 +1,13 @@
+services:
+  tusur-helper:
+    build: .
+    ports:
+      - "${HOST_PORT:-3000}:3000"
+    volumes:
+      - tusur-cache:/app/.cache
+    environment:
+      PORT: 3000
+    restart: unless-stopped
+
+volumes:
+  tusur-cache:

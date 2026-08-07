@@ -1,0 +1,7 @@
+.cache
+.git
+.DS_Store
+node_modules
+npm-debug.log
+Dockerfile
+docker-compose.yml

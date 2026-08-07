@@ -221,16 +221,17 @@ function otherApplicationsTableHtml(applicant, group) {
   `;
 }
 
-function applicantRowHtml(applicant, group) {
+function applicantRowHtml(applicant, group, displayIndex) {
   const allApplications = applicationsFor(applicant.code);
   const otherApplications = allApplications.filter((application) => application.groupId !== group.id);
   const firstPriorityPassing = passingFirstPriorityElsewhere(applicant, group.id);
   const mine = applicant.code === state.myCode;
   const expanded = state.expandedCodes.has(applicant.code);
+  const budgetPlaces = Number(group.budget_places || 0);
 
   return `
     <tr class="contest-row ${mine ? 'mine' : ''}">
-      <td>${escapeHtml(applicant.index)}</td>
+      <td><strong>${escapeHtml(displayIndex)}</strong><div class="muted">офиц. ${escapeHtml(applicant.index)}</div></td>
       <td>
         <strong>${escapeHtml(applicant.code)}</strong>
         ${mine ? '<span class="badge good">мой код</span>' : ''}
@@ -240,7 +241,7 @@ function applicantRowHtml(applicant, group) {
       <td>${escapeHtml(applicant.examMarksSum)}</td>
       <td>${escapeHtml(applicant.achievements)}</td>
       <td>${applicant.hasAgreement ? 'Да' : 'Нет'}</td>
-      <td>${applicant.isHighestPassingPriority ? 'Да' : 'Нет'}</td>
+      <td>${budgetPlaces > 0 && displayIndex <= budgetPlaces ? 'Да' : 'Нет'}</td>
       <td>
         <span class="priority-cell">
           <span class="priority-value ${Number(applicant.priority) > 1 ? 'warn' : 'good'}">${escapeHtml(applicant.priority)}</span>
@@ -260,10 +261,9 @@ function applicantRowsHtml(applicants, group) {
   let separatorShown = false;
   const rows = [];
 
-  for (const applicant of applicants) {
-    const index = Number(applicant.index);
+  for (const { applicant, displayIndex } of applicants) {
 
-    if (budgetPlaces > 0 && !separatorShown && index > budgetPlaces) {
+    if (budgetPlaces > 0 && !separatorShown && displayIndex > budgetPlaces) {
       rows.push(`
         <tr class="budget-separator">
           <td colspan="9"><span>Граница бюджетных мест: ${escapeHtml(budgetPlaces)}</span></td>
@@ -272,12 +272,12 @@ function applicantRowsHtml(applicants, group) {
       separatorShown = true;
     }
 
-    rows.push(applicantRowHtml(applicant, group));
+    rows.push(applicantRowHtml(applicant, group, displayIndex));
   }
 
   const lastApplicant = applicants[applicants.length - 1];
 
-  if (budgetPlaces > 0 && !separatorShown && lastApplicant && Number(lastApplicant.index) <= budgetPlaces) {
+  if (budgetPlaces > 0 && !separatorShown && lastApplicant && lastApplicant.displayIndex <= budgetPlaces) {
     rows.push(`
       <tr class="budget-separator">
         <td colspan="9"><span>Граница бюджетных мест: ${escapeHtml(budgetPlaces)}</span></td>
@@ -313,14 +313,20 @@ function renderApplicants() {
   const search = elements.searchInput.value.trim();
   const onlyPriorityMoreThanOne = elements.onlyPriorityMoreThanOne.checked;
   const excludePassingFirstPriority = elements.excludePassingFirstPriority.checked;
-  const applicants = group.abiturients.filter((applicant) => {
+  const shiftedApplicants = group.abiturients.filter((applicant) => {
     if (onlyPriorityMoreThanOne && Number(applicant.priority) <= 1) return false;
     if (excludePassingFirstPriority && passingFirstPriorityElsewhere(applicant, group.id)) return false;
+    return true;
+  }).map((applicant, index) => ({
+    applicant,
+    displayIndex: index + 1
+  }));
+  const applicants = shiftedApplicants.filter(({ applicant }) => {
     if (search && !applicant.code.includes(search)) return false;
     return true;
   });
 
-  elements.tableHint.textContent = `${groupTitle(group)}. Показано ${applicants.length} из ${group.abiturients.length}.`;
+  elements.tableHint.textContent = `${groupTitle(group)}. Показано ${applicants.length} из ${group.abiturients.length}. Место пересчитывается после включенных фильтров.`;
   elements.applicants.innerHTML = applicants.length
     ? `
       <div class="table-scroll">

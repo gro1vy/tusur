@@ -16,6 +16,7 @@ const initialSettings = readUserSettings(initialUsername);
 const state = {
   cache: null,
   username: initialUsername,
+  selectedUniversityId: initialSettings.selectedUniversityId || 'tusur',
   selectedGroupId: initialSettings.selectedGroupId || '',
   myCode: initialSettings.myCode || '',
   expandedCodes: new Set()
@@ -26,6 +27,8 @@ const elements = {
   startRefreshButton: document.querySelector('#startRefreshButton'),
   switchUserButton: document.querySelector('#switchUserButton'),
   usernameBadge: document.querySelector('#usernameBadge'),
+  universitySelect: document.querySelector('#universitySelect'),
+  startUniversitySelect: document.querySelector('#startUniversitySelect'),
   groupSelect: document.querySelector('#groupSelect'),
   startGroupSelect: document.querySelector('#startGroupSelect'),
   myCodeInput: document.querySelector('#myCodeInput'),
@@ -64,7 +67,7 @@ function escapeHtml(value) {
 }
 
 function selectedGroup() {
-  return state.cache?.groups.find((group) => group.id === state.selectedGroupId) || null;
+  return state.cache?.groups.find((group) => group.groupKey === state.selectedGroupId) || null;
 }
 
 function applicationsFor(code) {
@@ -75,17 +78,18 @@ function applyUserSettings(username) {
   const settings = readUserSettings(username);
 
   state.username = username;
+  state.selectedUniversityId = settings.selectedUniversityId || 'tusur';
   state.selectedGroupId = settings.selectedGroupId || '';
   state.myCode = settings.myCode || '';
   state.expandedCodes.clear();
 }
 
 function groupById(groupId) {
-  return state.cache?.groups.find((group) => group.id === groupId) || null;
+  return state.cache?.groups.find((group) => group.groupKey === groupId) || null;
 }
 
 function priorityBreakdownAbove(application) {
-  const group = groupById(application.groupId);
+  const group = groupById(application.groupKey);
 
   if (!group) {
     return '-';
@@ -121,7 +125,7 @@ function passingHigherPriorityElsewhere(applicant, currentGroupId) {
   }
 
   return applicationsFor(applicant.code).find((application) => {
-    if (application.groupId === currentGroupId) return false;
+    if (application.groupKey === currentGroupId) return false;
 
     const priority = Number(application.priority);
     if (Number.isNaN(priority) || priority >= currentPriority) return false;
@@ -136,10 +140,21 @@ function passingHigherPriorityElsewhere(applicant, currentGroupId) {
 function renderOptions(select) {
   select.innerHTML = '';
 
-  for (const group of state.cache?.groups || []) {
+  for (const group of (state.cache?.groups || []).filter((group) => group.universityId === state.selectedUniversityId)) {
     const option = document.createElement('option');
-    option.value = group.id;
+    option.value = group.groupKey;
     option.textContent = groupTitle(group);
+    select.append(option);
+  }
+}
+
+function renderUniversityOptions(select) {
+  select.innerHTML = '';
+
+  for (const university of state.cache?.universities || []) {
+    const option = document.createElement('option');
+    option.value = university.id;
+    option.textContent = university.name;
     select.append(option);
   }
 }
@@ -148,7 +163,7 @@ function renderStats() {
   const group = selectedGroup();
   const applicants = group?.abiturients || [];
   const priorityMoreThanOne = applicants.filter((item) => Number(item.priority) > 1).length;
-  const codesWithOtherApplications = applicants.filter((item) => applicationsFor(item.code).some((app) => app.groupId !== group.id)).length;
+  const codesWithOtherApplications = applicants.filter((item) => applicationsFor(item.code).some((app) => app.groupKey !== group.groupKey)).length;
 
   elements.stats.innerHTML = [
     ['Кеш обновлен', state.cache?.sourceGeneratedAt || 'нет данных'],
@@ -160,10 +175,10 @@ function renderStats() {
 }
 
 function applicationHtml(application, currentGroupId) {
-  const same = application.groupId === currentGroupId;
+  const same = application.groupKey === currentGroupId;
   return `
     <div class="application">
-      <div><span class="badge ${same ? 'good' : ''}">${same ? 'выбранное' : 'другое'}</span></div>
+      <div><span class="badge ${same ? 'good' : ''}">${same ? 'выбранное' : application.universityName}</span></div>
       <div>
         <strong>${escapeHtml(application.direction)}</strong>
         <div class="muted">${escapeHtml(application.profiles.join('; '))}</div>
@@ -180,7 +195,7 @@ function applicationHtml(application, currentGroupId) {
 
 function otherApplicationsTableHtml(applicant, group) {
   const allApplications = applicationsFor(applicant.code);
-  const otherApplications = allApplications.filter((application) => application.groupId !== group.id);
+  const otherApplications = allApplications.filter((application) => application.groupKey !== group.groupKey);
 
   if (!state.expandedCodes.has(applicant.code)) {
     return '';
@@ -189,6 +204,7 @@ function otherApplicationsTableHtml(applicant, group) {
   const content = otherApplications.length
     ? otherApplications.map((application) => `
       <tr>
+        <td>${escapeHtml(application.universityName)}</td>
         <td>${escapeHtml(application.priority)}</td>
         <td>${escapeHtml(application.index)}</td>
         <td>${escapeHtml(application.budgetPlaces)}</td>
@@ -200,7 +216,7 @@ function otherApplicationsTableHtml(applicant, group) {
         <td>${escapeHtml(application.status)}</td>
       </tr>
     `).join('')
-    : '<tr><td colspan="9" class="muted">Других направлений для этого кода не найдено.</td></tr>';
+    : '<tr><td colspan="10" class="muted">Других направлений для этого кода не найдено.</td></tr>';
 
   return `
     <tr class="details-row">
@@ -210,6 +226,7 @@ function otherApplicationsTableHtml(applicant, group) {
           <table class="nested-table">
             <thead>
               <tr>
+                <th>Вуз</th>
                 <th>Приоритет</th>
                 <th>Место</th>
                 <th>Бюджетных мест</th>
@@ -231,8 +248,8 @@ function otherApplicationsTableHtml(applicant, group) {
 
 function applicantRowHtml(applicant, group, displayIndex) {
   const allApplications = applicationsFor(applicant.code);
-  const otherApplications = allApplications.filter((application) => application.groupId !== group.id);
-  const higherPriorityPassing = passingHigherPriorityElsewhere(applicant, group.id);
+  const otherApplications = allApplications.filter((application) => application.groupKey !== group.groupKey);
+  const higherPriorityPassing = passingHigherPriorityElsewhere(applicant, group.groupKey);
   const mine = applicant.code === state.myCode;
   const expanded = state.expandedCodes.has(applicant.code);
   const budgetPlaces = Number(group.budget_places || 0);
@@ -323,7 +340,7 @@ function renderApplicants() {
   const excludePassingFirstPriority = elements.excludePassingFirstPriority.checked;
   const shiftedApplicants = group.abiturients.filter((applicant) => {
     if (onlyPriorityMoreThanOne && Number(applicant.priority) <= 1) return false;
-    if (excludePassingFirstPriority && passingHigherPriorityElsewhere(applicant, group.id)) return false;
+    if (excludePassingFirstPriority && passingHigherPriorityElsewhere(applicant, group.groupKey)) return false;
     return true;
   }).map((applicant, index) => ({
     applicant,
@@ -364,6 +381,8 @@ function render() {
 
   if (!state.cache) {
     elements.groupSelect.innerHTML = '<option value="">Кеш пуст</option>';
+    elements.universitySelect.innerHTML = '<option value="">Кеш пуст</option>';
+    elements.startUniversitySelect.innerHTML = '<option value="">Кеш пуст</option>';
     elements.startGroupSelect.innerHTML = '<option value="">Кеш пуст - нажмите «Обновить кеш»</option>';
     elements.stats.innerHTML = '<article class="stat"><span>Кеш</span><strong>пуст</strong></article>';
     elements.myCard.className = 'panel my-card empty';
@@ -375,12 +394,22 @@ function render() {
     return;
   }
 
-  if (!state.selectedGroupId || !selectedGroup()) {
-    state.selectedGroupId = state.cache.groups[0]?.id || '';
+  if (!state.selectedUniversityId || !(state.cache.universities || []).some((university) => university.id === state.selectedUniversityId)) {
+    state.selectedUniversityId = state.cache.universities?.[0]?.id || '';
   }
 
+  const universityGroups = (state.cache.groups || []).filter((group) => group.universityId === state.selectedUniversityId);
+
+  if (!state.selectedGroupId || !selectedGroup() || selectedGroup()?.universityId !== state.selectedUniversityId) {
+    state.selectedGroupId = universityGroups[0]?.groupKey || '';
+  }
+
+  renderUniversityOptions(elements.universitySelect);
+  renderUniversityOptions(elements.startUniversitySelect);
   renderOptions(elements.groupSelect);
   renderOptions(elements.startGroupSelect);
+  elements.universitySelect.value = state.selectedUniversityId;
+  elements.startUniversitySelect.value = state.selectedUniversityId;
   elements.groupSelect.value = state.selectedGroupId;
   elements.startGroupSelect.value = state.selectedGroupId;
   elements.myCodeInput.value = state.myCode;
@@ -432,7 +461,8 @@ async function refreshCache() {
   }
 }
 
-function saveSettings(groupId, myCode) {
+function saveSettings(universityId, groupId, myCode) {
+  state.selectedUniversityId = universityId;
   state.selectedGroupId = groupId;
   state.myCode = String(myCode || '').trim();
 
@@ -442,6 +472,7 @@ function saveSettings(groupId, myCode) {
 
   localStorage.setItem('currentUsername', state.username);
   localStorage.setItem(`user:${state.username}`, JSON.stringify({
+    selectedUniversityId: state.selectedUniversityId,
     selectedGroupId: state.selectedGroupId,
     myCode: state.myCode
   }));
@@ -454,12 +485,18 @@ elements.switchUserButton.addEventListener('click', () => {
   elements.startCodeInput.value = '';
   elements.startModal.classList.add('visible');
 });
+elements.universitySelect.addEventListener('change', () => {
+  state.selectedUniversityId = elements.universitySelect.value;
+  state.selectedGroupId = (state.cache.groups || []).find((group) => group.universityId === state.selectedUniversityId)?.groupKey || '';
+  saveSettings(state.selectedUniversityId, state.selectedGroupId, elements.myCodeInput.value);
+  render();
+});
 elements.groupSelect.addEventListener('change', () => {
-  saveSettings(elements.groupSelect.value, elements.myCodeInput.value);
+  saveSettings(elements.universitySelect.value, elements.groupSelect.value, elements.myCodeInput.value);
   render();
 });
 elements.myCodeInput.addEventListener('change', () => {
-  saveSettings(elements.groupSelect.value, elements.myCodeInput.value);
+  saveSettings(elements.universitySelect.value, elements.groupSelect.value, elements.myCodeInput.value);
   render();
 });
 elements.onlyPriorityMoreThanOne.addEventListener('change', renderApplicants);
@@ -472,8 +509,15 @@ elements.startUsernameInput.addEventListener('change', () => {
   elements.startCodeInput.value = settings.myCode || '';
 
   if (settings.selectedGroupId) {
+    state.selectedUniversityId = settings.selectedUniversityId || state.selectedUniversityId;
+    elements.startUniversitySelect.value = state.selectedUniversityId;
+    renderOptions(elements.startGroupSelect);
     elements.startGroupSelect.value = settings.selectedGroupId;
   }
+});
+elements.startUniversitySelect.addEventListener('change', () => {
+  state.selectedUniversityId = elements.startUniversitySelect.value;
+  renderOptions(elements.startGroupSelect);
 });
 elements.applicants.addEventListener('click', (event) => {
   const button = event.target.closest('button[data-code]');
@@ -512,7 +556,7 @@ elements.startForm.addEventListener('submit', (event) => {
 
   applyUserSettings(username);
   state.username = username;
-  saveSettings(elements.startGroupSelect.value, elements.startCodeInput.value);
+  saveSettings(elements.startUniversitySelect.value, elements.startGroupSelect.value, elements.startCodeInput.value);
   render();
 });
 

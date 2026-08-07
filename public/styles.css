@@ -483,6 +483,12 @@ input:focus {
   background: #fff;
 }
 
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 @media (max-width: 760px) {
   .page {
     width: min(100% - 20px, 1180px);
@@ -507,8 +513,13 @@ input:focus {
   }
 
   .hero-actions,
-  .secondary {
+  .secondary,
+  .modal-actions {
     width: 100%;
+  }
+
+  .modal-actions {
+    display: grid;
   }
 
   .hero-actions {

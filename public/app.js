@@ -23,6 +23,7 @@ const state = {
 
 const elements = {
   refreshButton: document.querySelector('#refreshButton'),
+  startRefreshButton: document.querySelector('#startRefreshButton'),
   switchUserButton: document.querySelector('#switchUserButton'),
   usernameBadge: document.querySelector('#usernameBadge'),
   groupSelect: document.querySelector('#groupSelect'),
@@ -256,7 +257,9 @@ function applicantRowsHtml(applicants, group) {
     rows.push(applicantRowHtml(applicant, group));
   }
 
-  if (budgetPlaces > 0 && !separatorShown && applicants.length && Number(applicants.at(-1).index) <= budgetPlaces) {
+  const lastApplicant = applicants[applicants.length - 1];
+
+  if (budgetPlaces > 0 && !separatorShown && lastApplicant && Number(lastApplicant.index) <= budgetPlaces) {
     rows.push(`
       <tr class="budget-separator">
         <td colspan="9"><span>Граница бюджетных мест: ${escapeHtml(budgetPlaces)}</span></td>
@@ -326,8 +329,8 @@ function render() {
   elements.usernameBadge.textContent = state.username || 'не выбран';
 
   if (!state.cache) {
-    elements.groupSelect.innerHTML = '<option>Кеш пуст</option>';
-    elements.startGroupSelect.innerHTML = '<option>Кеш пуст</option>';
+    elements.groupSelect.innerHTML = '<option value="">Кеш пуст</option>';
+    elements.startGroupSelect.innerHTML = '<option value="">Кеш пуст - нажмите «Обновить кеш»</option>';
     elements.stats.innerHTML = '<article class="stat"><span>Кеш</span><strong>пуст</strong></article>';
     elements.myCard.className = 'panel my-card empty';
     elements.myCard.textContent = 'Нажмите «Обновить кеш», чтобы загрузить данные с сайта ТУСУР.';
@@ -370,7 +373,9 @@ async function loadCache() {
 
 async function refreshCache() {
   elements.refreshButton.disabled = true;
+  elements.startRefreshButton.disabled = true;
   elements.refreshButton.textContent = 'Обновляю...';
+  elements.startRefreshButton.textContent = 'Обновляю...';
 
   try {
     const response = await fetch('/api/refresh', { method: 'POST' });
@@ -387,7 +392,9 @@ async function refreshCache() {
     showToast(error.message);
   } finally {
     elements.refreshButton.disabled = false;
+    elements.startRefreshButton.disabled = false;
     elements.refreshButton.textContent = 'Обновить кеш';
+    elements.startRefreshButton.textContent = 'Обновить кеш';
   }
 }
 
@@ -407,6 +414,7 @@ function saveSettings(groupId, myCode) {
 }
 
 elements.refreshButton.addEventListener('click', refreshCache);
+elements.startRefreshButton.addEventListener('click', refreshCache);
 elements.switchUserButton.addEventListener('click', () => {
   elements.startUsernameInput.value = '';
   elements.startCodeInput.value = '';
@@ -454,6 +462,16 @@ elements.startForm.addEventListener('submit', (event) => {
 
   if (!username) {
     showToast('Введите имя пользователя');
+    return;
+  }
+
+  if (!state.cache) {
+    showToast('Сначала обновите кеш, чтобы выбрать направление');
+    return;
+  }
+
+  if (!elements.startGroupSelect.value) {
+    showToast('Выберите направление');
     return;
   }
 

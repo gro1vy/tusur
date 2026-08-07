@@ -32,6 +32,7 @@ const elements = {
   startUsernameInput: document.querySelector('#startUsernameInput'),
   startCodeInput: document.querySelector('#startCodeInput'),
   onlyPriorityMoreThanOne: document.querySelector('#onlyPriorityMoreThanOne'),
+  excludePassingFirstPriority: document.querySelector('#excludePassingFirstPriority'),
   searchInput: document.querySelector('#searchInput'),
   stats: document.querySelector('#stats'),
   myCard: document.querySelector('#myCard'),
@@ -110,6 +111,18 @@ function priorityBreakdownAbove(application) {
     .sort(([a], [b]) => a - b)
     .map(([priority, count]) => `${priority}: ${count}`)
     .join(', ');
+}
+
+function passingFirstPriorityElsewhere(applicant, currentGroupId) {
+  return applicationsFor(applicant.code).find((application) => {
+    if (application.groupId === currentGroupId) return false;
+    if (Number(application.priority) !== 1) return false;
+
+    const position = Number(application.index);
+    const budgetPlaces = Number(application.budgetPlaces || 0);
+
+    return budgetPlaces > 0 && position > 0 && position <= budgetPlaces;
+  }) || null;
 }
 
 function renderOptions(select) {
@@ -211,13 +224,18 @@ function otherApplicationsTableHtml(applicant, group) {
 function applicantRowHtml(applicant, group) {
   const allApplications = applicationsFor(applicant.code);
   const otherApplications = allApplications.filter((application) => application.groupId !== group.id);
+  const firstPriorityPassing = passingFirstPriorityElsewhere(applicant, group.id);
   const mine = applicant.code === state.myCode;
   const expanded = state.expandedCodes.has(applicant.code);
 
   return `
     <tr class="contest-row ${mine ? 'mine' : ''}">
       <td>${escapeHtml(applicant.index)}</td>
-      <td><strong>${escapeHtml(applicant.code)}</strong>${mine ? '<span class="badge good">мой код</span>' : ''}</td>
+      <td>
+        <strong>${escapeHtml(applicant.code)}</strong>
+        ${mine ? '<span class="badge good">мой код</span>' : ''}
+        ${firstPriorityPassing ? '<span class="badge warn">проходит по 1 приоритету</span>' : ''}
+      </td>
       <td>${escapeHtml(applicant.rating)}</td>
       <td>${escapeHtml(applicant.examMarksSum)}</td>
       <td>${escapeHtml(applicant.achievements)}</td>
@@ -294,8 +312,10 @@ function renderApplicants() {
 
   const search = elements.searchInput.value.trim();
   const onlyPriorityMoreThanOne = elements.onlyPriorityMoreThanOne.checked;
+  const excludePassingFirstPriority = elements.excludePassingFirstPriority.checked;
   const applicants = group.abiturients.filter((applicant) => {
     if (onlyPriorityMoreThanOne && Number(applicant.priority) <= 1) return false;
+    if (excludePassingFirstPriority && passingFirstPriorityElsewhere(applicant, group.id)) return false;
     if (search && !applicant.code.includes(search)) return false;
     return true;
   });
@@ -429,6 +449,7 @@ elements.myCodeInput.addEventListener('change', () => {
   render();
 });
 elements.onlyPriorityMoreThanOne.addEventListener('change', renderApplicants);
+elements.excludePassingFirstPriority.addEventListener('change', renderApplicants);
 elements.searchInput.addEventListener('input', renderApplicants);
 elements.startUsernameInput.addEventListener('change', () => {
   const username = elements.startUsernameInput.value.trim();

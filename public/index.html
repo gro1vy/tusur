@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ТУСУР: анализ приоритетов</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <main class="page">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Магистратура, очная форма</p>
+          <h1>Анализ конкурсных списков ТУСУР</h1>
+          <p class="lead">Выберите направление и посмотрите, куда еще подали абитуриенты из этого списка по уникальному коду.</p>
+        </div>
+        <button id="refreshButton" class="primary" type="button">Обновить кеш</button>
+      </section>
+
+      <section class="panel settings">
+        <label>
+          Мой уникальный код
+          <input id="myCodeInput" type="text" inputmode="numeric" placeholder="Например, 1139809">
+        </label>
+        <label>
+          Текущее направление
+          <select id="groupSelect"></select>
+        </label>
+        <label class="checkbox">
+          <input id="onlyPriorityMoreThanOne" type="checkbox">
+          Показывать только тех, у кого на выбранном направлении приоритет больше 1
+        </label>
+      </section>
+
+      <section class="stats" id="stats"></section>
+
+      <section class="panel my-card" id="myCard"></section>
+
+      <section class="panel">
+        <div class="table-head">
+          <div>
+            <h2>Абитуриенты выбранного направления</h2>
+            <p id="tableHint"></p>
+          </div>
+          <input id="searchInput" type="search" placeholder="Поиск по коду">
+        </div>
+        <div id="applicants" class="applicants"></div>
+      </section>
+    </main>
+
+    <div id="startModal" class="modal">
+      <form class="modal-card" id="startForm">
+        <h2>Начальные данные</h2>
+        <p>При старте укажите свой уникальный код и направление. Если кеш еще пустой, сначала нажмите «Обновить кеш».</p>
+        <label>
+          Мой уникальный код
+          <input id="startCodeInput" type="text" inputmode="numeric" required>
+        </label>
+        <label>
+          Текущее направление
+          <select id="startGroupSelect" required></select>
+        </label>
+        <button class="primary" type="submit">Открыть</button>
+      </form>
+    </div>
+
+    <div id="toast" class="toast" role="status"></div>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

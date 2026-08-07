@@ -113,10 +113,18 @@ function priorityBreakdownAbove(application) {
     .join(', ');
 }
 
-function passingFirstPriorityElsewhere(applicant, currentGroupId) {
+function passingHigherPriorityElsewhere(applicant, currentGroupId) {
+  const currentPriority = Number(applicant.priority);
+
+  if (Number.isNaN(currentPriority) || currentPriority <= 1) {
+    return null;
+  }
+
   return applicationsFor(applicant.code).find((application) => {
     if (application.groupId === currentGroupId) return false;
-    if (Number(application.priority) !== 1) return false;
+
+    const priority = Number(application.priority);
+    if (Number.isNaN(priority) || priority >= currentPriority) return false;
 
     const position = Number(application.index);
     const budgetPlaces = Number(application.budgetPlaces || 0);
@@ -224,7 +232,7 @@ function otherApplicationsTableHtml(applicant, group) {
 function applicantRowHtml(applicant, group, displayIndex) {
   const allApplications = applicationsFor(applicant.code);
   const otherApplications = allApplications.filter((application) => application.groupId !== group.id);
-  const firstPriorityPassing = passingFirstPriorityElsewhere(applicant, group.id);
+  const higherPriorityPassing = passingHigherPriorityElsewhere(applicant, group.id);
   const mine = applicant.code === state.myCode;
   const expanded = state.expandedCodes.has(applicant.code);
   const budgetPlaces = Number(group.budget_places || 0);
@@ -235,7 +243,7 @@ function applicantRowHtml(applicant, group, displayIndex) {
       <td>
         <strong>${escapeHtml(applicant.code)}</strong>
         ${mine ? '<span class="badge good">мой код</span>' : ''}
-        ${firstPriorityPassing ? '<span class="badge warn">проходит по 1 приоритету</span>' : ''}
+        ${higherPriorityPassing ? `<span class="badge warn">проходит по приоритету ${escapeHtml(higherPriorityPassing.priority)}</span>` : ''}
       </td>
       <td>${escapeHtml(applicant.rating)}</td>
       <td>${escapeHtml(applicant.examMarksSum)}</td>
@@ -315,7 +323,7 @@ function renderApplicants() {
   const excludePassingFirstPriority = elements.excludePassingFirstPriority.checked;
   const shiftedApplicants = group.abiturients.filter((applicant) => {
     if (onlyPriorityMoreThanOne && Number(applicant.priority) <= 1) return false;
-    if (excludePassingFirstPriority && passingFirstPriorityElsewhere(applicant, group.id)) return false;
+    if (excludePassingFirstPriority && passingHigherPriorityElsewhere(applicant, group.id)) return false;
     return true;
   }).map((applicant, index) => ({
     applicant,

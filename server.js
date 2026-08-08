@@ -10,10 +10,12 @@ const CACHE_DIR = join(ROOT, '.cache');
 const CACHE_FILE = join(CACHE_DIR, 'contest-cache.json');
 const TUSUR_BASE = 'https://contest.tusur.ru/api/v1/campaigns/magistrant/fulltime';
 const TPU_BASE = 'https://apply.tpu.ru/api';
+const TSU_BASE = 'https://ratings.tsu.ru';
 
 const UNIVERSITIES = [
   { id: 'tusur', name: 'ТУСУР' },
-  { id: 'tpu', name: 'ТПУ' }
+  { id: 'tpu', name: 'ТПУ' },
+  { id: 'tsu', name: 'ТГУ' }
 ];
 
 const CONTENT_TYPES = {
@@ -85,6 +87,37 @@ function normalizeTpuApplicant(applicant, group, index) {
   };
 }
 
+function normalizeTsuApplicant(cells, group) {
+  const fixedTailLength = 9;
+  const examCells = cells.slice(2, Math.max(2, cells.length - fixedTailLength));
+  const tail = cells.slice(-fixedTailLength);
+  const examMarksSum = examCells.reduce((sum, value) => sum + toNumber(value), 0);
+  const achievements = toNumber(tail[0]);
+
+  return {
+    universityId: 'tsu',
+    universityName: 'ТГУ',
+    code: String(cells[1] || '').trim(),
+    index: toNumber(cells[0]),
+    rating: toNumber(tail[1]),
+    examMarksSum,
+    achievements,
+    priority: toNumber(tail[2]),
+    isHighestPriority: tail[3] === '1' || /^да$/i.test(tail[3]),
+    isHighestPassingPriority: false,
+    hasAgreement: /^да$/i.test(tail[4]),
+    hasContract: false,
+    status: 'Участвует в конкурсе',
+    groupId: group.id,
+    groupKey: `tsu:${group.id}`,
+    direction: group.direction,
+    profiles: group.profiles || [],
+    groupName: group.name,
+    budgetPlaces: group.budget_places,
+    payPlaces: group.pay_places
+  };
+}
+
 async function fetchJson(url) {
   const response = await fetch(url, { headers: { accept: 'application/json' } });
 
@@ -93,6 +126,31 @@ async function fetchJson(url) {
   }
 
   return response.json();
+}
+
+async function fetchText(url) {
+  const response = await fetch(url, { headers: { accept: 'text/html,*/*' } });
+
+  if (!response.ok) {
+    throw new Error(`${response.status} ${response.statusText}: ${url}`);
+  }
+
+  return response.text();
+}
+
+function decodeHtml(value) {
+  return String(value || '')
+    .replace(/&#x([\da-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function textFromHtml(value) {
+  return decodeHtml(String(value || '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
 }
 
 async function readCache() {
@@ -205,6 +263,64 @@ async function refreshTpu() {
   };
 }
 
+function parseTsuPrograms(html) {
+  const fulltimeSection = html.split('id="tab-0"')[1]?.split('id="tab-1"')[0] || html;
+  const rows = [...fulltimeSection.matchAll(/<tr class="text-left">([\s\S]*?)<\/tr>/g)];
+
+  return rows.map(([, row]) => {
+    const href = row.match(/href="\/study_stage\/programs\/master\/group-ratings\/([^"]+)"/)?.[1];
+    const direction = textFromHtml(row.match(/<strong>([\s\S]*?)<\/strong>/)?.[1]);
+    const profile = textFromHtml(row.match(/<div>([\s\S]*?)<\/div>/)?.[1]);
+    const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((match) => textFromHtml(match[1]));
+
+    if (!href || !direction) {
+      return null;
+    }
+
+    return {
+      id: href,
+      universityId: 'tsu',
+      universityName: 'ТГУ',
+      groupKey: `tsu:${href}`,
+      direction,
+      profiles: profile ? [profile] : [],
+      name: profile || direction,
+      budget_places: toNumber(cells[1]),
+      pay_places: toNumber(cells[4])
+    };
+  }).filter((group) => group && group.budget_places > 0);
+}
+
+function parseTsuBudgetApplicants(html, group) {
+  const budgetTable = html.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1];
+
+  if (!budgetTable) {
+    return [];
+  }
+
+  return [...budgetTable.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(([, row]) => {
+    const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((match) => textFromHtml(match[1]));
+    return cells.length >= 11 ? normalizeTsuApplicant(cells, group) : null;
+  }).filter((applicant) => applicant?.code);
+}
+
+async function refreshTsu() {
+  const overviewHtml = await fetchText(`${TSU_BASE}/study_stage/programs/master`);
+  const programGroups = parseTsuPrograms(overviewHtml);
+  const groups = await mapLimit(programGroups, 5, async (group) => {
+    const html = await fetchText(`${TSU_BASE}/study_stage/programs/master/group-ratings/${group.id}`);
+    return {
+      ...group,
+      abiturients: parseTsuBudgetApplicants(html, group)
+    };
+  });
+
+  return {
+    sourceGeneratedAt: new Date().toLocaleString('ru-RU'),
+    groups
+  };
+}
+
 function buildApplicantsByCode(groups) {
   const applicantsByCode = {};
 
@@ -228,14 +344,14 @@ function buildApplicantsByCode(groups) {
 }
 
 async function refreshCache() {
-  const [tusur, tpu] = await Promise.all([refreshTusur(), refreshTpu()]);
-  const groups = [...tusur.groups, ...tpu.groups];
+  const [tusur, tpu, tsu] = await Promise.all([refreshTusur(), refreshTpu(), refreshTsu()]);
+  const groups = [...tusur.groups, ...tpu.groups, ...tsu.groups];
   const applicantsByCode = buildApplicantsByCode(groups);
 
   const cache = {
     version: 2,
     refreshedAt: new Date().toISOString(),
-    sourceGeneratedAt: `ТУСУР: ${tusur.sourceGeneratedAt}; ТПУ: ${tpu.sourceGeneratedAt}`,
+    sourceGeneratedAt: `ТУСУР: ${tusur.sourceGeneratedAt}; ТПУ: ${tpu.sourceGeneratedAt}; ТГУ: ${tsu.sourceGeneratedAt}`,
     universities: UNIVERSITIES,
     groups,
     applicantsByCode
